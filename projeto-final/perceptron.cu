@@ -321,14 +321,6 @@ network genUniformDenseNetwork(size_t layers_num, size_t layer_size, size_t inpu
     return model;
 }
 
-int clampi(int k, int low, int high)
-{
-    assert(low < high);
-    if(k < low) k = low;
-    if(k > high) k = high;
-    return k;
-}
-
 double fabsCos(double x)
 {
     return fabs(cos(x));

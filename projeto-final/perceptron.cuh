@@ -71,13 +71,5 @@ double *evaluateDenseInput(network model, double *input);
 double costDenseNetwork(network model, size_t data_size, double **data);
 // Função de treino:
 void train(network model, size_t data_size, double **data);
-// Função para colocar k no intervalo [low,high]:
-int clampi(int k, int low, int high);
 // Função para retornar 1 ou -1 de acordo com o sinal de x:
 double signal(double x);
-// Função para calcular área de um triângulo de vértices (xa,ya), (xb,yb) e (xc,yc):
-double triangleArea(double xa, double ya, double xb, double yb, double xc, double yc);
-// Função para verificar se um ponto (xp,yp) está contido no triângulo de vértices (xa,ya), (xb,yb) e (xc,yc):
-bool pointInsideTriangle(double xp, double yp, double xa, double ya, double xb, double yb, double xc, double yc);
-// Desenha em uma matriz "input" um retângulo de dimensões width e height:
-void generateRect(double **input, size_t input_width, size_t input_height, double value, size_t x0, size_t y0, size_t width, size_t height);
