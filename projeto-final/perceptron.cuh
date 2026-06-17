@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <string.h>
+#include <iostream>
 
 #define OPTION_OUTPUT true
 #define DISCRETE_EVALUATION false
@@ -73,3 +74,7 @@ double costDenseNetwork(network model, size_t data_size, double **data);
 void train(network model, size_t data_size, double **data);
 // Função para retornar 1 ou -1 de acordo com o sinal de x:
 double signal(double x);
+
+// GPU functions:
+__device__ double dotProduct(double *A, double *B, size_t lenght);
+__global__ void computeLayerOutput();

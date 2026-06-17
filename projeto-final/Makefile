@@ -12,4 +12,4 @@ compile:
 	nvcc $(CODE_FILE).cu -o $(CODE_FILE) ;
 
 run: compile
-	./$(CODE_FILE) ;
+	- ./$(CODE_FILE) ;

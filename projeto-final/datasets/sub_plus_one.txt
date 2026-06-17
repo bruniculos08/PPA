@@ -1,0 +1,10 @@
+# formato: data_size input_size output_size e note que data_size = (número de linhas - 2)
+8 2 1
+1 1 1
+19 1 19
+2 1 2
+4 5 0
+10 5 6
+20 8 13
+20 -8 29
+-20 -8 -11
