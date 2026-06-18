@@ -181,9 +181,12 @@ double *evaluateDenseInput(network model, double *input)
     return last_layer_output;
 }
 
-__device__ void evaluateLayerOutput(network *model, layer *l, double *input, double *output)
+__device__ void evaluateLayerOutput(network *model, size_t layer_index, double *input, double **output)
 {
     size_t index = threadIdx.y;
+    layer *l = model->initial_layer;
+    for (size_t i = 0; i < layer_index; i++)
+        l = l->next;
     perceptron *neuron = l->neurons + index;
     if(model->activation_function != NULL)
         output[index] = (*model->activation_function)(dotProd(l->height, neuron->weights, input)+ neuron->b);
@@ -191,35 +194,20 @@ __device__ void evaluateLayerOutput(network *model, layer *l, double *input, dou
         output[index] = (dotProd(l->height, neuron->weights, input)+ neuron->b);
 }
 
-__global__ void evaluateDenseInputInsideGPU(network *model_GPU_address, double *input, double *result)
+double *evaluateDenseInputInsideGPU(network *model, double *input)
 {
-    layer *actual_layer;
-    actual_layer = model_GPU_address->initial_layer;
-    double *past_layer_output = input;
-    // double *actual_layer_output = (double *) malloc(actual_layer->height * sizeof(double));
-    double *actual_layer_output;
-    cudaMalloc(&actual_layer_output, actual_layer->height * sizeof(double));
-    int last_layer_size = model_GPU_address->input_size;
-    for(size_t i = 0; i < (size_t) model_GPU_address->layers_num; i++)
+    double *layer_input = input;
+    double *layer_output;
+    network *model_info = (network *) malloc(sizeof(network));
+    cudaMemcpy(model_info, model, sizeof(model), cudaMemcpyDeviceToHost);
+    size_t layers_size;
+    for (size_t i = 0; i < model_info->layers_num; i++)
     {
-        dim3 grid_dimension(1,1);
-        dim3 block_dimension(1, actual_layer->height);
-        evaluateLayerOutput<<<grid_dimension, block_dimension>>>(model_GPU_address, actual_layer, past_layer_output, actual_layer_output);
-        if(past_layer_output != input)
-            // free(past_layer_output);
-            cudaFree(past_layer_output);
-        past_layer_output = actual_layer_output;
-        last_layer_size = actual_layer->height;
-        if (actual_layer != model_GPU_address->final_layer)
-            // double *actual_layer_output = (double *) malloc(actual_layer->height * sizeof(double));
-            cudaMalloc(&actual_layer_output, actual_layer->height * sizeof(double));
+
+        evaluateLayerOutput(model, i, layer_input, &layer_output);
+        cudaFree(layer_input);
+        layer_input = layer_output;
     }
-    if(DISCRETE_EVALUATION)
-    {
-        for(size_t i = 0; i < model_GPU_address->output_size; i++)
-            past_layer_output[i] = round(past_layer_output[i]);
-    }
-    cudaMemcpy(result, past_layer_output, last_layer_size * sizeof(double), cudaMemcpyDeviceToDevice);
 }
 
 network genDenseNetwork(size_t layers_num, size_t *layers_size, size_t input_size, size_t output_size, double(*activation_function)(double))
