@@ -181,6 +181,47 @@ double *evaluateDenseInput(network model, double *input)
     return last_layer_output;
 }
 
+__device__ void evaluateLayerOutput(network *model, layer *l, double *input, double *output)
+{
+    size_t index = threadIdx.y;
+    perceptron *neuron = l->neurons + index;
+    if(model->activation_function != NULL)
+        output[index] = (*model->activation_function)(dotProd(l->height, neuron->weights, input)+ neuron->b);
+    else
+        output[index] = (dotProd(l->height, neuron->weights, input)+ neuron->b);
+}
+
+__global__ void evaluateDenseInputInsideGPU(network *model_GPU_address, double *input, double *result)
+{
+    layer *actual_layer;
+    actual_layer = model_GPU_address->initial_layer;
+    double *past_layer_output = input;
+    // double *actual_layer_output = (double *) malloc(actual_layer->height * sizeof(double));
+    double *actual_layer_output;
+    cudaMalloc(&actual_layer_output, actual_layer->height * sizeof(double));
+    int last_layer_size = model_GPU_address->input_size;
+    for(size_t i = 0; i < (size_t) model_GPU_address->layers_num; i++)
+    {
+        dim3 grid_dimension(1,1);
+        dim3 block_dimension(1, actual_layer->height);
+        evaluateLayerOutput<<<grid_dimension, block_dimension>>>(model_GPU_address, actual_layer, past_layer_output, actual_layer_output);
+        if(past_layer_output != input)
+            // free(past_layer_output);
+            cudaFree(past_layer_output);
+        past_layer_output = actual_layer_output;
+        last_layer_size = actual_layer->height;
+        if (actual_layer != model_GPU_address->final_layer)
+            // double *actual_layer_output = (double *) malloc(actual_layer->height * sizeof(double));
+            cudaMalloc(&actual_layer_output, actual_layer->height * sizeof(double));
+    }
+    if(DISCRETE_EVALUATION)
+    {
+        for(size_t i = 0; i < model_GPU_address->output_size; i++)
+            past_layer_output[i] = round(past_layer_output[i]);
+    }
+    cudaMemcpy(result, past_layer_output, last_layer_size * sizeof(double), cudaMemcpyDeviceToDevice);
+}
+
 network genDenseNetwork(size_t layers_num, size_t *layers_size, size_t input_size, size_t output_size, double(*activation_function)(double))
 {
     assert(layers_size != NULL);
@@ -444,7 +485,6 @@ int main(void)
     
     // network model = genDenseNetwork(layers_num, layers_size, input_size, output_size, logistic);
     network model = genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
-    network *model_GPU_address = copyNetworkToGPU(model);
     printDenseNetwork(model);
     printf("cost function value before %i trains: %lf\n", TRAINING_TIMES, costDenseNetwork(model, (size_t) data_size, data));
     validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
@@ -454,4 +494,21 @@ int main(void)
     validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
     // printf("evaluate after %i trainings: %lf %lf\n", TRAINING_TIMES, evaluateDenseInput(model, input_test)[0], evaluateDenseInput(model, input_test)[1]);
     printDenseNetwork(model);
+
+    std::cout << "GPU tests:" << std::endl;
+    network *model_GPU_address = copyNetworkToGPU(model);
+    std::cout << "evaluation result:" << std::endl;
+    double *output;
+    cudaMalloc(&output, output_size * sizeof(double));
+    dim3 grid_dim(1,1);
+    dim3 block_dim(1,1);
+    evaluateDenseInputInsideGPU<<<grid_dim,block_dim>>>(model_GPU_address, input_test, output);
+    double *output_CPU;
+    cudaMemcpy(output_CPU, output, output_size * sizeof(double), cudaMemcpyDeviceToHost);
+    for (size_t i = 0; i < output_size; i++)
+    {
+        std::cout << output_CPU[i] << std::endl;
+    }
+
+
 }
