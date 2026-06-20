@@ -181,17 +181,18 @@ double *evaluateDenseInput(network model, double *input)
     return last_layer_output;
 }
 
-__device__ void evaluateLayerOutput(network *model, size_t layer_index, double *input, double **output)
+__global__ void evaluateLayerOutput(network *model, size_t layer_index, double *input, double **output)
 {
     size_t index = threadIdx.y;
     layer *l = model->initial_layer;
     for (size_t i = 0; i < layer_index; i++)
         l = l->next;
+    cudaMalloc(output, l->height * sizeof(double));
     perceptron *neuron = l->neurons + index;
     if(model->activation_function != NULL)
-        output[index] = (*model->activation_function)(dotProd(l->height, neuron->weights, input)+ neuron->b);
+        (*output)[index] = (*model->activation_function)(dotProd(l->height, neuron->weights, input)+ neuron->b);
     else
-        output[index] = (dotProd(l->height, neuron->weights, input)+ neuron->b);
+        (*output)[index] = (dotProd(l->height, neuron->weights, input)+ neuron->b);
 }
 
 double *evaluateDenseInputInsideGPU(network *model, double *input)
@@ -200,14 +201,20 @@ double *evaluateDenseInputInsideGPU(network *model, double *input)
     double *layer_output;
     network *model_info = (network *) malloc(sizeof(network));
     cudaMemcpy(model_info, model, sizeof(model), cudaMemcpyDeviceToHost);
-    size_t layers_size;
+    size_t *layers_size;
+    cudaMemcpy(layers_size, model_info->layers_size, model_info->layers_num * sizeof(size_t), cudaMemcpyDeviceToHost);
     for (size_t i = 0; i < model_info->layers_num; i++)
     {
-
-        evaluateLayerOutput(model, i, layer_input, &layer_output);
+        dim3 grid_dim(1);
+        dim3 block_dim(1, layers_size[i]);
+        evaluateLayerOutput<<<grid_dim,block_dim>>>(model, i, layer_input, &layer_output);
         cudaFree(layer_input);
         layer_input = layer_output;
     }
+    cudaDeviceSynchronize();
+    double *result = (double *) malloc(layers_size[model_info->layers_num] * sizeof(double));
+    cudaMemcpy(result, layer_output, model_info->output_size * sizeof(double), cudaMemcpyDeviceToHost);
+    return result;
 }
 
 network genDenseNetwork(size_t layers_num, size_t *layers_size, size_t input_size, size_t output_size, double(*activation_function)(double))
@@ -490,7 +497,7 @@ int main(void)
     cudaMalloc(&output, output_size * sizeof(double));
     dim3 grid_dim(1,1);
     dim3 block_dim(1,1);
-    evaluateDenseInputInsideGPU<<<grid_dim,block_dim>>>(model_GPU_address, input_test, output);
+    evaluateDenseInputInsideGPU(model_GPU_address, input_test);
     double *output_CPU;
     cudaMemcpy(output_CPU, output, output_size * sizeof(double), cudaMemcpyDeviceToHost);
     for (size_t i = 0; i < output_size; i++)
