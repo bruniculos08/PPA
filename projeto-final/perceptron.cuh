@@ -17,11 +17,9 @@ typedef struct Perceptron perceptron;
 
 struct Perceptron
 {
-    // Os inputs de um "perceptron" são os outputs dos "perceptrons" da camanda...
-    // ... anterior ligados e ele:
-    perceptron **input;
-    int input_size;
-    // O número de pesos é igual ao número de inputs:
+    // Tamanho do vetor weights:
+    size_t input_size;
+    // O número de pesos é igual ao número de inputs (ou seja, o tamanho da camada anterior):
     double *weights;
     // Constante bias:
     double b;
@@ -33,24 +31,15 @@ struct Layer
 {
     // Uma camada é um vetor de "perceptrons":
     perceptron *neurons;
-    int height;
-    // As camadas serão colocadas em uma lista encadeada e portanto são necessárias...
-    // ... as seguintes informações:
-    layer *previous;
-    layer *next;
+    size_t size;
 };
 
 typedef struct Network
 {
-    size_t input_size;
+    // Vetor contendo as camadas da rede neural:
+    layer *layer_vector;
     // Uma rede tem um número de outputs que diz portanto o número de perceptrons em sua última camada:
-    size_t output_size;
     size_t layers_num;
-    size_t *layers_size;
-    // Camada inicial:
-    layer *initial_layer;
-    // Camada final:
-    layer *final_layer;
     // Função de ativação:
     double(*activation_function)(double);
 } network;
