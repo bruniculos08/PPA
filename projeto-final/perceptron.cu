@@ -187,8 +187,10 @@ __global__ void evaluateLayerOutput(network *model, size_t layer_index, double *
 {
     size_t index = threadIdx.y;
     layer *l = &model->layer_vector[0];
-    cudaMalloc(output, model->layer_vector[model->layers_num - 1].size * sizeof(double));
-    perceptron *neuron = l->neurons + index;
+    printf("Computing value for index = %i and layer index = %i\n", index, layer_index);
+    size_t output_size = (layer_index >= 1) ? model->layer_vector[layer_index - 1].size : model->layer_vector[0].neurons[0].input_size; 
+    cudaMalloc(output, output_size * sizeof(double));
+    perceptron *neuron = &l->neurons[index];
     if(model->activation_function != NULL)
         (*output)[index] = (*model->activation_function)(dotProdGPU(l->size, neuron->weights, input) + neuron->b);
     else
@@ -210,7 +212,7 @@ double *evaluateDenseInputInsideGPU(network *model, double *input)
         dim3 grid_dim(1);
         dim3 block_dim(1, layer_vector[i].size);
         evaluateLayerOutput<<<grid_dim,block_dim>>>(model, i, layer_input, &layer_output);
-        cudaFree(layer_input);
+        // cudaFree(layer_input);
         layer_input = layer_output;
     }
     cudaDeviceSynchronize();
