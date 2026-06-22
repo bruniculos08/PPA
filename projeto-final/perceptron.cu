@@ -2,11 +2,11 @@
 
 void printDenseNetwork(network &model)
 {
-    for(size_t i = 0; i < model.layers_num; i++)
+    for (size_t i = 0; i < model.layers_num; i++)
     {
         layer l = model.layer_vector[i];
         std::cout << "layer " << i << ":" << std::endl;
-        for(size_t j = 0; j < (size_t) l.size; j++)
+        for (size_t j = 0; j < (size_t) l.size; j++)
         {
             printf("[");
             for (size_t j = 0; j < (size_t) l.neurons[i].input_size; j++)
@@ -193,6 +193,7 @@ __global__ void evaluateLayerOutput(network *model, size_t layer_index, double *
         (*output)[index] = (*model->activation_function)(dotProdGPU(l->size, neuron->weights, input) + neuron->b);
     else
         (*output)[index] = (dotProdGPU(l->size, neuron->weights, input) + neuron->b);
+    printf("Computed value for index = %i and layer index = %i: %lf\n", index, layer_index, (*output)[index]);
 }
 
 double *evaluateDenseInputInsideGPU(network *model, double *input)
@@ -200,9 +201,10 @@ double *evaluateDenseInputInsideGPU(network *model, double *input)
     double *layer_input = input;
     double *layer_output;
     network *model_info = (network *) malloc(sizeof(network));
-    cudaMemcpy(model_info, model, sizeof(model), cudaMemcpyDeviceToHost);
+    cudaMemcpy(model_info, model, sizeof(network), cudaMemcpyDeviceToHost);
     layer *layer_vector;
     cudaMemcpy(layer_vector, model_info->layer_vector, model_info->layers_num * sizeof(layer), cudaMemcpyDeviceToHost);
+    printf("model_info->layers_num = %i\n", model_info->layers_num);
     for (size_t i = 0; i < model_info->layers_num; i++)
     {
         dim3 grid_dim(1);
@@ -218,207 +220,65 @@ double *evaluateDenseInputInsideGPU(network *model, double *input)
     return result;
 }
 
-network genDenseNetwork(size_t layers_num, size_t *layers_size, size_t input_size, size_t output_size, double(*activation_function)(double))
-{
-    assert(layers_size != NULL);
-    assert(layers_num != 0);
-    network model;
-    model.initial_layer = NULL;
-    model.final_layer = NULL;
-    model.input_size = input_size;
-    model.output_size = output_size;
-    model.layers_num = layers_num;
-    model.activation_function = activation_function;
-    // it should always be the case that layer_size[layers_num - 1] == output_size,...
-    // ... otherwise we have the 2 following options:
-    //  (1) change the value of layer_size[layers_num - 1] to outputsize;
-    //  (2) add one layer, changing layers_num to layers_num + 1, and storing at &layers_size[layers_num - 1]...
-    //  ... the value of output_size.
-    //  Implementing the last option first:
-    if(OPTION_OUTPUT && (layers_size[layers_num - 1] != output_size))
-    layers_num++;
-    model.layers_size = (size_t *) malloc(sizeof(size_t) * layers_num);
-    memcpy((void *) model.layers_num, (void *) layers_size, (size_t) layers_num - 1);
-    model.layers_size[layers_num - 1] = output_size;
-    
-    layer *l = (layer *) malloc(sizeof(layer));
-    model.initial_layer = l;
-    l->previous = NULL;
-    for(size_t i = 0; i < (size_t) layers_num; i++)
-    {
-        l->height = model.layers_size[i];
-        l->neurons = (perceptron *) malloc(sizeof(perceptron) * l->height);
-        for(size_t j = 0; j < l->height; j++)
-        {
-            l->neurons[j].b = 1.0;
-            l->neurons[j].input = NULL;
-            if(l->previous)
-                l->neurons[j].input_size = l->previous->height;
-            else
-                l->neurons[j].input_size = input_size;
-            l->neurons[j].weights = (double *) malloc(l->neurons[j].input_size * sizeof(double));
-            for(size_t k = 0; k < l->neurons[j].input_size; k++)
-                l->neurons[j].weights[k] = 1.0; 
-        }
-        if(i < layers_num - 1)
-        {
-            l->next = (layer *) malloc(sizeof(layer));
-            l = l->next;
-        }
-    }
-    model.final_layer = l;
-    return model;
-}
-
-// copyPointerVectorToGPU()
-void copyPerceptronToGPU(perceptron &content, perceptron *GPU_address)
-{
-    perceptron copy_content = content;
-    cudaMalloc(&copy_content.weights, sizeof(double) * copy_content.input_size);
-    cudaMemcpy(copy_content.weights, content.weights, sizeof(double) * copy_content.input_size, cudaMemcpyHostToDevice);
-    if(content.input != NULL)
-    {
-        std::cout << "Error: functionality not implemented yet." << std::endl;
-        exit(1);
-    }
-    cudaMemcpy(GPU_address, &copy_content, sizeof(perceptron), cudaMemcpyHostToDevice);
-}
-
-layer *copyLayersToGPU(layer &initial_layer, layer &final_layer, layer *initial_layer_GPU_address)
-{
-    layer *actual_layer = &initial_layer;
-    layer *GPU_actual_layer = initial_layer_GPU_address;
-    layer *GPU_previous_layer = NULL;
-    layer *GPU_next_layer = NULL;
-    while (actual_layer != NULL)
-    {
-        if (GPU_next_layer)
-            GPU_actual_layer = GPU_next_layer;
-        layer content = *actual_layer;
-        cudaMalloc(&content.neurons, sizeof(perceptron) * content.height);
-        for (size_t i = 0; i < content.height; i++)
-            copyPerceptronToGPU(
-                actual_layer->neurons[i],
-                content.neurons + i
-            );
-        content.previous = GPU_previous_layer;
-        if (content.next)
-        {
-            cudaMalloc(&GPU_next_layer, sizeof(layer));
-            content.next = GPU_next_layer;
-        }
-        cudaMemcpy(GPU_actual_layer, &content, sizeof(layer), cudaMemcpyHostToDevice);
-        GPU_previous_layer = GPU_actual_layer;
-        actual_layer = actual_layer->next;
-    }
-    return GPU_actual_layer;
-}
-
 network *copyNetworkToGPU(network model)
 {
-    network *model_GPU_address;
-    layer *initial_layer_GPU_address, *final_layer_GPU_address;
-    size_t *layers_size_GPU_address;
-    cudaMalloc(&model_GPU_address, sizeof(network));
-    cudaMalloc(&layers_size_GPU_address, sizeof(size_t) * model.layers_num);
-    cudaMemcpy(layers_size_GPU_address, &model.layers_size, sizeof(size_t) * model.layers_num, cudaMemcpyHostToDevice);
-    cudaMalloc(&initial_layer_GPU_address, sizeof(layer));
-    final_layer_GPU_address = copyLayersToGPU(*(model.initial_layer), *(model.final_layer), initial_layer_GPU_address);
-    model.initial_layer = initial_layer_GPU_address;
-    model.final_layer = final_layer_GPU_address;
-    model.layers_size = layers_size_GPU_address;
-    cudaMemcpy(model_GPU_address, &model, sizeof(network), cudaMemcpyHostToDevice);
-    std::cout << "teste" << std::endl;
-    return model_GPU_address;
+    for (size_t i = 0; i < model.layers_num; i++)
+    {
+        layer *l = &model.layer_vector[i];
+        for (size_t j = 0; j < l->size; j++)
+        {
+            perceptron *p = &l->neurons[i];
+            p->weights = (double *) copyVectorToGPU(p->weights, p->input_size * sizeof(double));
+        }
+        l->neurons = (perceptron *) copyVectorToGPU(l->neurons, l->size * sizeof(perceptron));
+    }
+    model.layer_vector = (layer *) copyVectorToGPU(model.layer_vector, model.layers_num * sizeof(layer));
+    network *model_copy = (network *) copyVectorToGPU(&model, sizeof(network));
+    return model_copy;
 }
 
 network genUniformDenseNetwork(size_t layers_num, size_t layer_size, size_t input_size, size_t output_size, double(*activation_function)(double))
 {
     network model;
-    model.initial_layer = NULL;
-    model.final_layer = NULL;
-    model.input_size = input_size;
-    model.output_size = output_size;
     model.layers_num = layers_num;
-    model.activation_function = activation_function;
-    layer *l;
-    for(size_t i = 0; i < (size_t) layers_num; i++)
+    model.layer_vector = (layer *) malloc(layers_num * sizeof(layer));
+    for (size_t i = 0; i < layers_num; i++)
     {
-        // Caso da primeira camada:
-        if(i == 0)
+        layer *l = &model.layer_vector[i];
+        l->size = layer_size;
+        l->neurons = (perceptron *) malloc(layer_size * sizeof(perceptron));
+        for (size_t j = 0; j < layer_size; j++)
         {
-            l = (layer *) malloc(sizeof(layer));
-            model.initial_layer = l;
-            // Se há mais de uma camada: 
-            if(layers_num > 1)
-                l->height = layer_size;
-            else
-                l->height = output_size;
-            l->neurons = (perceptron *) malloc((l->height) * sizeof(perceptron));
-            l->previous = NULL;
-            l->next = NULL;
-            for(size_t j = 0; j < (size_t) l->height; j++)
-            {
-                l->neurons[j].input_size = input_size;
-                l->neurons[j].b = 1.0;
-                l->neurons[j].weights = (double *) malloc((l->neurons[j].input_size) * sizeof(double));
-                for(size_t k = 0; k < (size_t) l->neurons[j].input_size; k++)
-                    l->neurons[j].weights[k] = 1.0;
-                l->neurons[j].input = NULL;
-            }
-            continue;
-        }
-        // Se a atual camada a ser criada não é a última:
-        else if(i != (layers_num - 1))
-        {
-            l->next = (layer *) malloc(sizeof(layer));
-            l->next->next = NULL;
-            l->next->previous = l;
-            l = l->next; 
-            l->height = layer_size;
-            l->neurons = (perceptron *) malloc(layer_size * sizeof(perceptron));
-            for(size_t j = 0; j < (size_t) l->height; j++)
-            {
-                l->neurons[j].input_size = (l->previous)->height;
-                l->neurons[j].b = 0.0;
-                l->neurons[j].weights = (double *) malloc(l->neurons[j].input_size * sizeof(double));
-                // l->neurons[j].input = (perceptron **) malloc(l->neurons[j].input_size * sizeof(perceptron *));
-                l->neurons[j].input = NULL;
-                for(size_t k = 0; k < (size_t) l->neurons[j].input_size; k++)
-                {
-                    l->neurons[j].weights[k] = 1.0;
-                    // (l->neurons[j]).input[k] = &(l->previous->neurons[k]);
-                }
-            }
-            continue;
-        }
-        else
-        {
-            l->next = (layer *) malloc(sizeof(layer));
-            l->next->next = NULL;
-            l->next->previous = l;
-            l = l->next; 
-            model.final_layer = l;
-            // A última camada deve ter o mesmo número de neurônios que o output:
-            l->height = output_size;
-            l->neurons = (perceptron *) malloc(output_size * sizeof(perceptron));
-            for(size_t j = 0; j < (size_t) l->height; j++)
-            {
-                l->neurons[j].input_size = l->previous[0].height;
-                l->neurons[j].b = 0.0;
-                l->neurons[j].weights = (double *) malloc(l->neurons[j].input_size * sizeof(double));
-                // l->neurons[j].input = (perceptron **) malloc(l->neurons[j].input_size * sizeof(perceptron *));
-                l->neurons[j].input = NULL;
-                for(size_t k = 0; k < (size_t) l->neurons[j].input_size; k++)
-                {
-                    l->neurons[j].weights[k] = 1.0;
-                    // l->neurons[j].input[k] = &l->previous->neurons[k];
-                }
-            }
-            continue;
+            l->neurons[i].b = 0.0;
+            l->neurons[i].input_size = (i >= 1) ? model.layer_vector[i - 1].size : input_size;
+            l->neurons[i].weights = (double *) malloc(l->neurons[i].input_size * sizeof(double));
+            memset(l->neurons[i].weights, 0, l->neurons[i].input_size * sizeof(double));
         }
     }
-    if(model.final_layer == NULL) model.final_layer = model.initial_layer;
+    model.activation_function = activation_function;
+    return model;
+}
+
+network genDenseNetwork(size_t layers_num, size_t *layer_size, size_t input_size, size_t output_size, double(*activation_function)(double))
+{
+    network model;
+    model.layers_num = layers_num;
+    model.layer_vector = (layer *) malloc(layers_num * sizeof(layer));
+    for (size_t i = 0; i < layers_num; i++)
+    {
+        layer *l = &model.layer_vector[i];
+        l->size = layer_size[i];
+        l->neurons = (perceptron *) malloc(layer_size[i] * sizeof(perceptron));
+        for (size_t j = 0; j < layer_size[i]; j++)
+        {
+            l->neurons[j].b = 1.0;
+            l->neurons[j].input_size = (i >= 1) ? model.layer_vector[i - 1].size : input_size;
+            l->neurons[j].weights = (double *) malloc(l->neurons[j].input_size * sizeof(double));
+            for (size_t weight_index = 0; weight_index < l->neurons[i].input_size; weight_index++)
+                l->neurons[i].weights[weight_index] = 1.0;
+        }
+    }
+    model.activation_function = activation_function;
     return model;
 }
 

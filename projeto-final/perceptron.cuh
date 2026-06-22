@@ -45,7 +45,7 @@ typedef struct Network
 } network;
 
 // Função para "imprimir" rede neural densa:
-void printDenseNetwork(network model);
+void printDenseNetwork(network &model);
 // Função para gerar vetor de dados:
 double **readData(char *file_name, int *data_size, int *input_size, int *output_size);
 // Função para multiplicar vetores de doubles:
@@ -63,6 +63,14 @@ double costDenseNetwork(network model, size_t data_size, double **data);
 void train(network model, size_t data_size, double **data);
 // Função para retornar 1 ou -1 de acordo com o sinal de x:
 double signal(double x);
+
+void *copyVectorToGPU(void *content, size_t size)
+{
+    void *address;
+    cudaMalloc(&address, size);
+    cudaMemcpy(address, content, size, cudaMemcpyHostToDevice);
+    return address;
+}
 
 // GPU functions:
 __device__ double dotProduct(double *A, double *B, size_t lenght);
