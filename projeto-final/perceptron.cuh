@@ -22,7 +22,7 @@ struct Perceptron
     // O número de pesos é igual ao número de inputs (ou seja, o tamanho da camada anterior):
     double *weights;
     // Constante bias:
-    double b;
+    double *b;
 };
 
 typedef struct Layer layer;
@@ -64,6 +64,10 @@ void train(network model, size_t data_size, double **data);
 // Função para retornar 1 ou -1 de acordo com o sinal de x:
 double signal(double x);
 
+// CPU functions to use GPU processing:
+double costDenseNetworkUsingGPU(network *model, size_t data_size, double **data);
+void trainUsingGPU(network model, size_t data_size, double **data);
+double *evaluateDenseInputUsingGPU(network *model, double *input);
 void *copyVectorToGPU(void *content, size_t size)
 {
     void *address;
@@ -71,7 +75,18 @@ void *copyVectorToGPU(void *content, size_t size)
     cudaMemcpy(address, content, size, cudaMemcpyHostToDevice);
     return address;
 }
+void *copyData(void *content, size_t size, cudaMemcpyKind option)
+{
+    void *address;
+    if ((option == cudaMemcpyHostToDevice) || (option == cudaMemcpyDeviceToDevice))
+        cudaMalloc(&address, size);
+    else if (option != cudaMemcpyDefault)
+        address = malloc(size);
+    else exit(1);
+    cudaMemcpy(address, content, size, option);
+    return address;
+}
 
 // GPU functions:
-__device__ double dotProduct(double *A, double *B, size_t lenght);
-__global__ void computeLayerOutput();
+__device__ double dotProductDevice(double *A, double *B, size_t lenght);
+__global__ void evaluateLayerOutput(network *model, size_t layer_index, double *input, double **output);
