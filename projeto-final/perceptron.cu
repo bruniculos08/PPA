@@ -379,11 +379,14 @@ int main(void)
     network model = NeuralNetworkHost::genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
 
     std::cout << "Starting CPU tests" << std::endl;
+    auto beggining = std::chrono::steady_clock::now();
 
     for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) NeuralNetworkHost::trainDenseNetwork(model, (size_t) data_size, data);
     double *host_output = NeuralNetworkHost::evaluateDenseInput(model, input_test);
 
-    std::cout << "Ending GPU tests" << std::endl;
+    auto ending = std::chrono::steady_clock::now();
+    auto diff = ending - beggining;
+    std::cout << "Ending CPU tests, time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(diff).count() << std::endl;
 
     network m = NeuralNetworkHost::genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
     network *device_model = CudaManagementByHost::copyNetworkToGPU(m);
@@ -391,11 +394,14 @@ int main(void)
     double *device_input = (double *) CudaManagementByHost::copyData(input_test, input_size * sizeof(double), cudaMemcpyHostToDevice);
 
     std::cout << "Starting GPU tests" << std::endl;
+    beggining = std::chrono::steady_clock::now();
 
     for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) CudaManagementByHost::trainDenseNetworkUsingGPU(device_model, host_model_with_device_weights, (size_t) data_size, data);
     double *device_output = CudaManagementByHost::evaluateDenseInputUsingGPU(device_model, host_model_with_device_weights, device_input);
 
-    std::cout << "Ending GPU tests" << std::endl;
+    ending = std::chrono::steady_clock::now();
+    diff = ending - beggining;
+    std::cout << "Ending GPU tests, time elapsed = " << std::chrono::duration_cast<std::chrono::milliseconds>(diff).count() << std::endl;
 
     std::cout << "Evaluation results:" << std::endl;
     for (size_t i = 0; i < output_size; i++)

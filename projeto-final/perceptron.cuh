@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <iostream>
+#include <chrono>
 
 #define OPTION_OUTPUT true
 #define DISCRETE_EVALUATION false
