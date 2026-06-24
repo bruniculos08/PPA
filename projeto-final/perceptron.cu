@@ -350,16 +350,6 @@ network NeuralNetworkHost::genDenseNetwork(size_t layers_num, size_t *layer_size
     return model;
 }
 
-double fabsCos(double x)
-{
-    return fabs(cos(x));
-}
-
-double logistic(double x)
-{
-    return (1 / (1 + exp(-x)));
-}
-
 void NeuralNetworkHost::validateDenseNeuralNetwork(network model, double **data, size_t data_size, size_t input_size, size_t output_size)
 {
     printf("evaluating validation dataset:\n");
@@ -394,55 +384,40 @@ int main(void)
     //     printf("\n");
     // }
 
-    // double input_test[] = {1, 1};
     double input_test[] = {2, 1};
     size_t layers_num = 1;
-    // size_t uniform_layers_size = 1;
     size_t layers_size[] = {(size_t) output_size};
     double **validation = (double **) malloc(sizeof(double *));
     validation[0] = (double *) malloc(2 * sizeof(double));
     validation[0][0] = 2;
     validation[0][1] = 1;
 
-    // network model = genUniformDenseNetwork(layers_num, (size_t) layers_size, (size_t) input_size, (size_t) output_size, NULL);
-    // network model = genUniformDenseNetwork(layers_num, uniform_layers_size, (size_t) input_size, (size_t) output_size, logistic);
-    // network model = genUniformDenseNetwork(layers_num, (size_t) layers_size, (size_t) input_size, (size_t) output_size, fabsCos);
-
-    // network model = genDenseNetwork(layers_num, layers_size, input_size, output_size, logistic);
     network model = NeuralNetworkHost::genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
 
-    std::cout << "CPU tests:" << std::endl;
+    std::cout << "Starting CPU tests" << std::endl;
 
-    // NeuralNetworkHost::printDenseNetwork(model);
-    // printf("cost function value before %i trains: %lf\n", TRAINING_TIMES, NeuralNetworkHost::costDenseNetwork(model, (size_t) data_size, data));
-    // NeuralNetworkHost::validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
-    // printf("evaluate before %i trainings: %lf %lf\n", TRAINING_TIMES, evaluateDenseInput(model, input_test)[0], evaluateDenseInput(model, input_test)[1]);
     for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) NeuralNetworkHost::trainDenseNetwork(model, (size_t) data_size, data);
-    // printf("cost function value after %i trains: %lf\n", TRAINING_TIMES, NeuralNetworkHost::costDenseNetwork(model, (size_t) data_size, data));
-    // NeuralNetworkHost::validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
-    // printf("evaluate after %i trainings: %lf %lf\n", TRAINING_TIMES, evaluateDenseInput(model, input_test)[0], evaluateDenseInput(model, input_test)[1]);
-    // NeuralNetworkHost::printDenseNetwork(model);
     double *host_output = NeuralNetworkHost::evaluateDenseInput(model, input_test);
 
-    std::cout << "CPU tests end" << std::endl;
+    std::cout << "Ending GPU tests" << std::endl;
 
     network m = NeuralNetworkHost::genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
     network *device_model = CudaManagementByHost::copyNetworkToGPU(m);
     network *host_model_with_device_weights = CudaManagementByHost::getWeightsFromGPU(device_model);
     double *device_input = (double *) CudaManagementByHost::copyData(input_test, input_size * sizeof(double), cudaMemcpyHostToDevice);
 
-    std::cout << "GPU tests:" << std::endl;
+    std::cout << "Starting GPU tests" << std::endl;
 
     for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) CudaManagementByHost::trainDenseNetworkUsingGPU(device_model, host_model_with_device_weights, (size_t) data_size, data);
     double *device_output = CudaManagementByHost::evaluateDenseInputUsingGPU(device_model, host_model_with_device_weights, device_input);
 
-    std::cout << "GPU tests end" << std::endl;
+    std::cout << "Ending GPU tests" << std::endl;
 
-    std::cout << "evaluations result:" << std::endl;
+    std::cout << "Evaluation results:" << std::endl;
     for (size_t i = 0; i < output_size; i++)
     {
-        std::cout << device_output[i] << std::endl;
-        std::cout << host_output[i] << std::endl;
+        std::cout << "device_output[" << i << "] = " << device_output[i] << std::endl;
+        std::cout << "host_output [" << i << "] = " << host_output[i] << std::endl;
     }
     return 0;
 }
