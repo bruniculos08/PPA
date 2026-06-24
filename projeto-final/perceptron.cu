@@ -76,9 +76,7 @@ void NeuralNetworkHost::trainDenseNetwork(network model, int data_size, double *
         {
             for(size_t j = 0; j < actual_layer.neurons[i].input_size; j++)
             {   
-                // printf("Training w_%li,%li...\n", i, k + 1);
                 double cost_w = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
-                // printf("cost_w = %lf\n", cost_w);
                 
                 ((actual_layer.neurons[i]).weights[j]) += EPSILON;
                 double cost_w_epsilon = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
@@ -86,14 +84,12 @@ void NeuralNetworkHost::trainDenseNetwork(network model, int data_size, double *
 
                 ((actual_layer.neurons[i]).weights[j]) -= (cost_w_epsilon - cost_w) * EPSILON;
             }
-            // To change the bias value:
             double cost_w = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
 
             *((actual_layer.neurons[i]).b) += EPSILON;
             double cost_w_epsilon = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
             *((actual_layer.neurons[i]).b) -= EPSILON;
 
-            // ((actual_layer->neurons[i]).b) -= signal(cost_w_epsilon - cost_w) * EPSILON;
             *((actual_layer.neurons[i]).b) -= (cost_w_epsilon - cost_w) * EPSILON;
         }
     }
@@ -120,7 +116,7 @@ void CudaManagementByHost::trainDenseNetworkUsingGPU(network *device_model_addre
                 *weight -= (cost_w_epsilon - cost_w) * EPSILON;
                 cudaMemcpy((actual_layer.neurons[i]).weights + j, weight, sizeof(double), cudaMemcpyHostToDevice);
             }
-            // To change the bias value:
+
             double *bias = ((double *) CudaManagementByHost::copyData((actual_layer.neurons[i]).b, sizeof(double), cudaMemcpyDeviceToHost));
 
             double cost_w = CudaManagementByHost::costDenseNetworkUsingGPU(device_model_address, host_model_with_device_weights, data_size, host_data);
@@ -130,17 +126,10 @@ void CudaManagementByHost::trainDenseNetworkUsingGPU(network *device_model_addre
             *bias -= EPSILON;
             cudaMemcpy((actual_layer.neurons[i]).b, bias, sizeof(double), cudaMemcpyHostToDevice);
 
-            // ((actual_layer->neurons[i]).b) -= signal(cost_w_epsilon - cost_w) * EPSILON;
             *bias -= (cost_w_epsilon - cost_w) * EPSILON;
             cudaMemcpy((actual_layer.neurons[i]).b, bias, sizeof(double), cudaMemcpyHostToDevice);
         }
     }
-}
-
-double NeuralNetworkHost::signal(double x)
-{
-        if(x >= 0) return 1.0;
-        return -1.0;
 }
 
 double NeuralNetworkHost::costDenseNetwork(network model, size_t data_size, double **data)
@@ -148,17 +137,14 @@ double NeuralNetworkHost::costDenseNetwork(network model, size_t data_size, doub
     size_t input_size = model.layer_vector[0].size;
     size_t output_size = model.layer_vector[model.layers_num - 1].size;
     double carry = 0.0;
-    // data_size is the number of samples and then the cost function is the average of error related to each sample:
     for(size_t i = 0; i < data_size; i++)
     {
-        // data[i] = {x1, x2, ..., xn, y1, y2, ..., yk}
         for(size_t j = 0; j < output_size; j++)
         {
             if(COST_FUNCTION == 0)
             {
                 carry += fabs((data[i][input_size + j] - (NeuralNetworkHost::evaluateDenseInput(model, data[i]))[j])) / ((double) data_size);
             }
-            // else if(COST_FUNCTION == 1)
             else
             {
                 carry += pow((data[i][input_size + j] - (NeuralNetworkHost::evaluateDenseInput(model, data[i]))[j]), 2.0) / ((double) data_size);
@@ -288,12 +274,10 @@ network *CudaManagementByHost::copyNetworkToGPU(network model)
 
 network *CudaManagementByHost::getWeightsFromGPU(network *device_model)
 {
-    // Building a model with GPU addressed weights - step 1:
     network *host_model = ((network *) CudaManagementByHost::copyData(device_model, sizeof(network), cudaMemcpyDeviceToHost));
     host_model->layer_vector = (layer *) CudaManagementByHost::copyData(host_model->layer_vector, host_model->layers_num * sizeof(layer), cudaMemcpyDeviceToHost);
     for(size_t layer_index = 0; layer_index < host_model->layers_num; layer_index++)
     {
-        // Building a model with GPU addressed weights - step 2:
         host_model->layer_vector[layer_index].neurons = (perceptron *) CudaManagementByHost::copyData(
             host_model->layer_vector[layer_index].neurons,
             host_model->layer_vector[layer_index].size * sizeof(perceptron),

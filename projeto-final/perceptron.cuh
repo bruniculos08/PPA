@@ -14,6 +14,30 @@
 // #define TRAINING_TIMES 800000
 #define TRAINING_TIMES 800
 
+typedef struct Matrix matrix;
+
+struct Matrix
+{
+    int rows, columns;
+    double *values;
+};
+
+#define getFromMatrix(m, i, j) m.values[i * m.columns + j]
+
+matrix buildMatrixFromArray(double **array, size_t rows, size_t columns)
+{
+    assert(rows > 0);
+    assert(columns > 0);
+    matrix m;
+    m.columns = columns;
+    m.rows = rows;
+    m.values = (double *) malloc(rows * columns * sizeof(double));
+    for (size_t i = 0; i < rows; i++)
+        for (size_t j = 0; j < columns; j++)
+            m.values[i * columns + j] = array[i][j];
+    return m;
+}
+
 typedef struct Perceptron perceptron;
 
 struct Perceptron
@@ -64,11 +88,7 @@ namespace NeuralNetworkHost {
     // Função de custo (erro):
     double costDenseNetwork(network model, size_t data_size, double **data);
     // Função de treino:
-    void train(network model, size_t data_size, double **data);
-    // Função de treino:
     void trainDenseNetwork(network model, int data_size, double **data);
-    // Função para retornar 1 ou -1 de acordo com o sinal de x:
-    double signal(double x);
     // Função para validação da rede neural:
     void validateDenseNeuralNetwork(network model, double **data, size_t data_size, size_t input_size, size_t output_size);
 }
@@ -76,7 +96,7 @@ namespace NeuralNetworkHost {
 // CPU functions to use GPU processing:
 namespace CudaManagementByHost {
     double costDenseNetworkUsingGPU(network *model, network *host_model_with_device_weights, size_t data_size, double **data);
-    void trainUsingGPU(network model, size_t data_size, double **data);
+    void trainUsingGPU(network model, size_t data_size, matrix data);
     void trainDenseNetworkUsingGPU(network *device_model, network *host_model_with_device_weights, int data_size, double **host_data);
     double *evaluateDenseInputUsingGPU(network *model, network *host_model_with_device_weights, double *input);
     void *copyData(void *content, size_t size, cudaMemcpyKind option)
