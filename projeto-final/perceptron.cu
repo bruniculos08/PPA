@@ -1,6 +1,6 @@
 #include "perceptron.cuh"
 
-void printDenseNetwork(network &model)
+void NeuralNetworkHost::printDenseNetwork(network &model)
 {
     for (size_t i = 0; i < model.layers_num; i++)
     {
@@ -67,7 +67,7 @@ double **readData(char *file_name, int *data_size, int *input_size, int *output_
     return data;
 }
 
-void trainDenseNetwork(network model, int data_size, double **data)
+void NeuralNetworkHost::trainDenseNetwork(network model, int data_size, double **data)
 {
     for(size_t layer_index = 0; layer_index < model.layers_num; layer_index++)
     {
@@ -77,20 +77,20 @@ void trainDenseNetwork(network model, int data_size, double **data)
             for(size_t j = 0; j < actual_layer.neurons[i].input_size; j++)
             {   
                 // printf("Training w_%li,%li...\n", i, k + 1);
-                double cost_w = costDenseNetwork(model, data_size, data); 
+                double cost_w = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
                 // printf("cost_w = %lf\n", cost_w);
                 
                 ((actual_layer.neurons[i]).weights[j]) += EPSILON;
-                double cost_w_epsilon = costDenseNetwork(model, data_size, data);
+                double cost_w_epsilon = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
                 ((actual_layer.neurons[i]).weights[j]) -= EPSILON;
 
                 ((actual_layer.neurons[i]).weights[j]) -= (cost_w_epsilon - cost_w) * EPSILON;
             }
             // To change the bias value:
-            double cost_w = costDenseNetwork(model, data_size, data); 
-            
+            double cost_w = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
+
             *((actual_layer.neurons[i]).b) += EPSILON;
-            double cost_w_epsilon = costDenseNetwork(model, data_size, data);
+            double cost_w_epsilon = NeuralNetworkHost::costDenseNetwork(model, data_size, data);
             *((actual_layer.neurons[i]).b) -= EPSILON;
 
             // ((actual_layer->neurons[i]).b) -= signal(cost_w_epsilon - cost_w) * EPSILON;
@@ -99,15 +99,17 @@ void trainDenseNetwork(network model, int data_size, double **data)
     }
 }
 
-void trainDenseNetworkUsingGPU(network *device_model_address, int data_size, double **host_data)
+void CudaManagementByHost::trainDenseNetworkUsingGPU(network *device_model_address, int data_size, double **host_data)
 {
     // Building a model with GPU addressed weights - step 1:
-    network model = *((network *) copyData(device_model_address, sizeof(network), cudaMemcpyDeviceToHost));
-    model.layer_vector = (layer *) copyData(model.layer_vector, model.layers_num * sizeof(layer), cudaMemcpyDeviceToHost);
+    network *model_pointer = ((network *) CudaManagementByHost::copyData(device_model_address, sizeof(network), cudaMemcpyDeviceToHost));
+    // std::cout << "model_pointer->layers_num = " << model_pointer->layers_num << std::endl;
+    network &model = *((network *) CudaManagementByHost::copyData(device_model_address, sizeof(network), cudaMemcpyDeviceToHost));
+    model.layer_vector = (layer *) CudaManagementByHost::copyData(model.layer_vector, model.layers_num * sizeof(layer), cudaMemcpyDeviceToHost);
     for(size_t layer_index = 0; layer_index < model.layers_num; layer_index++)
     {
         // Building a model with GPU addressed weights - step 2:
-        model.layer_vector[layer_index].neurons = (perceptron *) copyData(
+        model.layer_vector[layer_index].neurons = (perceptron *) CudaManagementByHost::copyData(
             model.layer_vector[layer_index].neurons,
             model.layer_vector[layer_index].size * sizeof(perceptron),
             cudaMemcpyDeviceToHost
@@ -118,12 +120,12 @@ void trainDenseNetworkUsingGPU(network *device_model_address, int data_size, dou
         {
             for(size_t j = 0; j < actual_layer.neurons[i].input_size; j++)
             {
-                double *weight = ((double *) copyData((actual_layer.neurons[i]).weights + j, sizeof(double), cudaMemcpyDeviceToHost));
+                double *weight = ((double *) CudaManagementByHost::copyData((actual_layer.neurons[i]).weights + j, sizeof(double), cudaMemcpyDeviceToHost));
 
-                double cost_w = costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
+                double cost_w = CudaManagementByHost::costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
                 *weight += EPSILON;
                 cudaMemcpy((actual_layer.neurons[i]).weights + j, weight, sizeof(double), cudaMemcpyHostToDevice);
-                double cost_w_epsilon = costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
+                double cost_w_epsilon = CudaManagementByHost::costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
                 *weight -= EPSILON;
                 cudaMemcpy((actual_layer.neurons[i]).weights + j, weight, sizeof(double), cudaMemcpyHostToDevice);
 
@@ -131,12 +133,12 @@ void trainDenseNetworkUsingGPU(network *device_model_address, int data_size, dou
                 cudaMemcpy((actual_layer.neurons[i]).weights + j, weight, sizeof(double), cudaMemcpyHostToDevice);
             }
             // To change the bias value:
-            double *bias = ((double *) copyData((actual_layer.neurons[i]).b, sizeof(double), cudaMemcpyDeviceToHost));
+            double *bias = ((double *) CudaManagementByHost::copyData((actual_layer.neurons[i]).b, sizeof(double), cudaMemcpyDeviceToHost));
 
-            double cost_w = costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
+            double cost_w = CudaManagementByHost::costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
             *bias += EPSILON;
             cudaMemcpy((actual_layer.neurons[i]).b, bias, sizeof(double), cudaMemcpyHostToDevice);
-            double cost_w_epsilon = costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
+            double cost_w_epsilon = CudaManagementByHost::costDenseNetworkUsingGPU(device_model_address, data_size, host_data);
             *bias -= EPSILON;
             cudaMemcpy((actual_layer.neurons[i]).b, bias, sizeof(double), cudaMemcpyHostToDevice);
 
@@ -147,13 +149,13 @@ void trainDenseNetworkUsingGPU(network *device_model_address, int data_size, dou
     }
 }
 
-double signal(double x)
+double NeuralNetworkHost::signal(double x)
 {
         if(x >= 0) return 1.0;
         return -1.0;
 }
 
-double costDenseNetwork(network model, size_t data_size, double **data)
+double NeuralNetworkHost::costDenseNetwork(network model, size_t data_size, double **data)
 {
     size_t input_size = model.layer_vector[0].size;
     size_t output_size = model.layer_vector[model.layers_num - 1].size;
@@ -166,29 +168,29 @@ double costDenseNetwork(network model, size_t data_size, double **data)
         {
             if(COST_FUNCTION == 0)
             {
-                carry += fabs((data[i][input_size + j] - (evaluateDenseInput(model, data[i]))[j])) / ((double) data_size);
+                carry += fabs((data[i][input_size + j] - (NeuralNetworkHost::evaluateDenseInput(model, data[i]))[j])) / ((double) data_size);
             }
             // else if(COST_FUNCTION == 1)
             else
             {
-                carry += pow((data[i][input_size + j] - (evaluateDenseInput(model, data[i]))[j]), 2.0) / ((double) data_size);
+                carry += pow((data[i][input_size + j] - (NeuralNetworkHost::evaluateDenseInput(model, data[i]))[j]), 2.0) / ((double) data_size);
             }
         }
     }
     return carry;
 }
 
-double costDenseNetworkUsingGPU(network *device_model_address, size_t data_size, double **host_data)
+double CudaManagementByHost::costDenseNetworkUsingGPU(network *device_model_address, size_t data_size, double **host_data)
 {
-    network &model = *((network *) copyData(device_model_address, sizeof(network), cudaMemcpyDeviceToHost));
-    model.layer_vector = ((layer *) copyData(model.layer_vector, model.layers_num * sizeof(layer), cudaMemcpyDeviceToHost));
+    network &model = *((network *) CudaManagementByHost::copyData(device_model_address, sizeof(network), cudaMemcpyDeviceToHost));
+    model.layer_vector = ((layer *) CudaManagementByHost::copyData(model.layer_vector, model.layers_num * sizeof(layer), cudaMemcpyDeviceToHost));
     size_t input_size = model.layer_vector[0].size;
     size_t output_size = model.layer_vector[model.layers_num - 1].size;
     double carry = 0.0;
     for(size_t i = 0; i < data_size; i++)
     {
-        double *device_data = (double *) copyVectorToGPU(host_data[i], input_size * sizeof(double));
-        double *evaluation = evaluateDenseInputUsingGPU(device_model_address, device_data);
+        double *device_data = (double *) CudaManagementByHost::copyData(host_data[i], input_size * sizeof(double), cudaMemcpyHostToDevice);
+        double *evaluation = CudaManagementByHost::evaluateDenseInputUsingGPU(device_model_address, device_data);
         for(size_t j = 0; j < output_size; j++)
         {
             if(COST_FUNCTION == 0)
@@ -204,96 +206,113 @@ double costDenseNetworkUsingGPU(network *device_model_address, size_t data_size,
     return carry;
 }
 
-double dotProd(size_t dim, double *v1, double *v2)
+double NeuralNetworkHost::dotProduct(size_t dim, double *v1, double *v2)
 {
+    // printf("Vector 1:\n");
+    // for(size_t i = 0; i < dim; i++)
+    //     printf("v1[%i] = %lf\n", i, v1[i]);
+
     double carry = 0.0;
     for(size_t i = 0; i < dim; i++)
         carry += (v1[i] * v2[i]);
     return carry;
 }
 
-__device__ double dotProdDevice(size_t dim, double *v1, double *v2)
+__device__ double NeuralNetworkDevice::dotProduct(size_t dim, double *v1, double *v2)
 {
+    // printf("Vector 1:\n");
+    // for(size_t i = 0; i < dim; i++)
+    //     printf("v1[%i] = %lf\n", i, v1[i]);
+
     double carry = 0.0;
     for(size_t i = 0; i < dim; i++)
         carry += (v1[i] * v2[i]);
     return carry;
 }
 
-double *evaluateDenseInput(network model, double *input)
+double *NeuralNetworkHost::evaluateDenseInput(network model, double *input)
 {   
     layer *actual_layer;
-    actual_layer = &model.layer_vector[0];
     double *actual_layer_output;
     double *last_layer_output;
     actual_layer_output = NULL;
-    // last_layer_output = NULL;
     last_layer_output = input;
-    int last_layer_size = model.layer_vector[0].size;
+    int last_layer_size = model.layer_vector[0].neurons[0].input_size;
     for(size_t i = 0; i < (size_t) model.layers_num; i++)
     {
-        // The problem is that we need to fix it for the initial case when...
+        actual_layer = &model.layer_vector[i];
         actual_layer_output = (double *) malloc(actual_layer->size * sizeof(double));
         for(size_t j = 0; j < (size_t) actual_layer->size; j++)
         {
             if(model.activation_function != NULL)
             {
-                actual_layer_output[j] = (*model.activation_function)(dotProd(last_layer_size, actual_layer->neurons[j].weights, last_layer_output)
+                actual_layer_output[j] = (*model.activation_function)(NeuralNetworkHost::dotProduct(last_layer_size, actual_layer->neurons[j].weights, last_layer_output)
                                         + (*(actual_layer->neurons[j].b)));
             }
             else 
-            actual_layer_output[j] = dotProd(last_layer_size, actual_layer->neurons[j].weights, last_layer_output) + (*(actual_layer->neurons[j].b));
+            actual_layer_output[j] = NeuralNetworkHost::dotProduct(last_layer_size, actual_layer->neurons[j].weights, last_layer_output) + (*((actual_layer->neurons[j]).b));
+            perceptron *neuron = &actual_layer->neurons[j];
+            // printf("Debug 2 - output[%i] = %lf, neuron->weights[%i] = %lf, neuron->weights[%i] = %lf, neuron->b[0] = %lf\n", 
+            //     j, actual_layer_output[j], 0, actual_layer->neurons[j].weights[0], 1, actual_layer->neurons[j].weights[1], *(actual_layer->neurons[j].b));
+            // printf("Debug 3 - input[%i] = %lf, input[%i] = %lf\n", 0, input[0], 1, input[1]);
         }
         if(last_layer_output != input) 
             free(last_layer_output);
         last_layer_output = actual_layer_output;
         last_layer_size = actual_layer->size;
     }
-    if(DISCRETE_EVALUATION)
-    {
-        for(size_t i = 0; i < model.layer_vector[model.layers_num - 1].size; i++)
-            last_layer_output[i] = round(last_layer_output[i]);
-    }
+    // if(DISCRETE_EVALUATION)
+    // {
+    //     for(size_t i = 0; i < model.layer_vector[model.layers_num - 1].size; i++)
+    //         last_layer_output[i] = round(last_layer_output[i]);
+    // }
     return last_layer_output;
 }
 
-__global__ void evaluateLayerOutput(network *model, size_t layer_index, double *input, double **output)
+__global__ void NeuralNetworkDevice::evaluateLayerOutput(network *model, size_t layer_index, double *input, double *output)
 {
     size_t index = threadIdx.y;
     layer *l = &model->layer_vector[0];
-    size_t output_size = (layer_index >= 1) ? model->layer_vector[layer_index - 1].size : model->layer_vector[0].neurons[0].input_size; 
-    cudaMalloc(output, output_size * sizeof(double));
+    size_t input_size = (layer_index >= 1) ? model->layer_vector[layer_index - 1].size : model->layer_vector[0].neurons[0].input_size; 
     perceptron *neuron = &l->neurons[index];
     if(model->activation_function != NULL)
-        (*output)[index] = (*model->activation_function)(dotProdDevice(l->size, neuron->weights, input) + (*(neuron->b)));
+        output[index] = (*model->activation_function)(NeuralNetworkDevice::dotProduct(neuron->input_size, neuron->weights, input) + (*(neuron->b)));
     else
-        (*output)[index] = (dotProdDevice(l->size, neuron->weights, input) + (*(neuron->b)));
+    {
+        // printf("Debug 1\n");
+        output[index] = (NeuralNetworkDevice::dotProduct(neuron->input_size, neuron->weights, input) + (*(neuron->b)));
+        // printf("Debug 2 - output[%i] = %lf, neuron->weights[%i] = %lf, neuron->weights[%i] = %lf, neuron->b[0] = %lf\n",
+        //     index, output[index], 0, neuron->weights[0], 1, neuron->weights[1], neuron->b[0]);
+        // printf("Debug 3 - input[%i] = %lf, input[%i] = %lf\n", 0, input[0], 1, input[1]);
+    }
 }
 
-double *evaluateDenseInputUsingGPU(network *model, double *input)
+double *CudaManagementByHost::evaluateDenseInputUsingGPU(network *model, double *input)
 {
     double *layer_input = input;
     double *layer_output;
-    network *model_info = (network *) malloc(sizeof(network));
-    cudaMemcpy(model_info, model, sizeof(network), cudaMemcpyDeviceToHost);
-    layer *layer_vector = (layer *) malloc(model_info->layers_num * sizeof(layer));
-    cudaMemcpy(layer_vector, model_info->layer_vector, model_info->layers_num * sizeof(layer), cudaMemcpyDeviceToHost);
+    network *model_info = (network *) CudaManagementByHost::copyData(model, sizeof(network), cudaMemcpyDeviceToHost);
+    layer *layer_vector = (layer *) CudaManagementByHost::copyData(model_info->layer_vector, model_info->layers_num * sizeof(layer), cudaMemcpyDeviceToHost);
+    // std::cout << "model_info->layers_num = " << model_info->layers_num << std::endl;
     for (size_t i = 0; i < model_info->layers_num; i++)
     {
+        cudaMalloc(&layer_output, layer_vector[i].size * sizeof(double));
         dim3 grid_dim(1);
         dim3 block_dim(1, layer_vector[i].size);
-        evaluateLayerOutput<<<grid_dim,block_dim>>>(model, i, layer_input, &layer_output);
-        cudaFree(layer_input);
+        NeuralNetworkDevice::evaluateLayerOutput<<<grid_dim,block_dim>>>(model, i, layer_input, layer_output);
+        if (layer_input != input) cudaFree(layer_input);
         layer_input = layer_output;
     }
     cudaDeviceSynchronize();
     size_t output_size = layer_vector[model_info->layers_num - 1].size;
-    double *result = (double *) malloc(output_size * sizeof(double));
-    cudaMemcpy(result, layer_output, output_size * sizeof(double), cudaMemcpyDeviceToHost);
+    double *result = (double *) CudaManagementByHost::copyData(layer_output, output_size * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(layer_output);
+    free(model_info);
+    free(layer_vector);
     return result;
 }
 
-network *copyNetworkToGPU(network model)
+network *CudaManagementByHost::copyNetworkToGPU(network model)
 {
     for (size_t i = 0; i < model.layers_num; i++)
     {
@@ -301,17 +320,18 @@ network *copyNetworkToGPU(network model)
         for (size_t j = 0; j < l->size; j++)
         {
             perceptron *p = &l->neurons[i];
-            p->weights = (double *) copyVectorToGPU(p->weights, p->input_size * sizeof(double));
-            p->b = (double *) copyVectorToGPU(p->b, sizeof(double));
+            p->weights = (double *) CudaManagementByHost::copyData(p->weights, p->input_size * sizeof(double), cudaMemcpyHostToDevice);
+            p->b = (double *) CudaManagementByHost::copyData(p->b, sizeof(double), cudaMemcpyHostToDevice);
         }
-        l->neurons = (perceptron *) copyVectorToGPU(l->neurons, l->size * sizeof(perceptron));
+        l->neurons = (perceptron *) CudaManagementByHost::copyData(l->neurons, l->size * sizeof(perceptron), cudaMemcpyHostToDevice);
     }
-    model.layer_vector = (layer *) copyVectorToGPU(model.layer_vector, model.layers_num * sizeof(layer));
-    network *model_copy = (network *) copyVectorToGPU(&model, sizeof(network));
+    model.layer_vector = (layer *) CudaManagementByHost::copyData(model.layer_vector, model.layers_num * sizeof(layer), cudaMemcpyHostToDevice);
+    model.activation_function = NULL;
+    network *model_copy = (network *) CudaManagementByHost::copyData(&model, sizeof(network), cudaMemcpyHostToDevice);
     return model_copy;
 }
 
-network genUniformDenseNetwork(size_t layers_num, size_t layer_size, size_t input_size, size_t output_size, double(*activation_function)(double))
+network NeuralNetworkHost::genUniformDenseNetwork(size_t layers_num, size_t layer_size, size_t input_size, size_t output_size, double(*activation_function)(double))
 {
     network model;
     model.layers_num = layers_num;
@@ -334,7 +354,7 @@ network genUniformDenseNetwork(size_t layers_num, size_t layer_size, size_t inpu
     return model;
 }
 
-network genDenseNetwork(size_t layers_num, size_t *layer_size, size_t input_size, size_t output_size, double(*activation_function)(double))
+network NeuralNetworkHost::genDenseNetwork(size_t layers_num, size_t *layer_size, size_t input_size, size_t output_size, double(*activation_function)(double))
 {
     network model;
     model.layers_num = layers_num;
@@ -368,12 +388,12 @@ double logistic(double x)
     return (1 / (1 + exp(-x)));
 }
 
-void validateDenseNeuralNetwork(network model, double **data, size_t data_size, size_t input_size, size_t output_size)
+void NeuralNetworkHost::validateDenseNeuralNetwork(network model, double **data, size_t data_size, size_t input_size, size_t output_size)
 {
     printf("evaluating validation dataset:\n");
     for(size_t i = 0; i < data_size; i++)
     {
-        double *result = evaluateDenseInput(model, data[i]);
+        double *result = NeuralNetworkHost::evaluateDenseInput(model, data[i]);
         for(size_t j = 0; j < output_size; j++)
         {
             printf("y%li = %lf", j, result[j]);
@@ -387,6 +407,7 @@ void validateDenseNeuralNetwork(network model, double **data, size_t data_size, 
 
 int main(void)
 {
+    cudaDeviceReset();
     double **data;
     int data_size, input_size, output_size;
     // data = readData("datasets/logistic_regression.txt", &data_size, &input_size, &output_size);
@@ -414,38 +435,38 @@ int main(void)
     // network model = genUniformDenseNetwork(layers_num, (size_t) layers_size, (size_t) input_size, (size_t) output_size, NULL);
     // network model = genUniformDenseNetwork(layers_num, uniform_layers_size, (size_t) input_size, (size_t) output_size, logistic);
     // network model = genUniformDenseNetwork(layers_num, (size_t) layers_size, (size_t) input_size, (size_t) output_size, fabsCos);
-    
+
     // network model = genDenseNetwork(layers_num, layers_size, input_size, output_size, logistic);
-    network model = genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
-    network *model_GPU_address = copyNetworkToGPU(
-        genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL)
-    );
+    network model = NeuralNetworkHost::genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
 
     std::cout << "CPU tests:" << std::endl;
 
-    printDenseNetwork(model);
-    printf("cost function value before %i trains: %lf\n", TRAINING_TIMES, costDenseNetwork(model, (size_t) data_size, data));
-    validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
+
+    NeuralNetworkHost::printDenseNetwork(model);
+    // printf("cost function value before %i trains: %lf\n", TRAINING_TIMES, NeuralNetworkHost::costDenseNetwork(model, (size_t) data_size, data));
+    // NeuralNetworkHost::validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
     // printf("evaluate before %i trainings: %lf %lf\n", TRAINING_TIMES, evaluateDenseInput(model, input_test)[0], evaluateDenseInput(model, input_test)[1]);
-    for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) trainDenseNetwork(model, (size_t) data_size, data);
-    printf("cost function value after %i trains: %lf\n", TRAINING_TIMES, costDenseNetwork(model, (size_t) data_size, data));
-    validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
+    for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) NeuralNetworkHost::trainDenseNetwork(model, (size_t) data_size, data);
+    // printf("cost function value after %i trains: %lf\n", TRAINING_TIMES, NeuralNetworkHost::costDenseNetwork(model, (size_t) data_size, data));
+    // NeuralNetworkHost::validateDenseNeuralNetwork(model, validation, 1, input_size, output_size);
     // printf("evaluate after %i trainings: %lf %lf\n", TRAINING_TIMES, evaluateDenseInput(model, input_test)[0], evaluateDenseInput(model, input_test)[1]);
-    printDenseNetwork(model);
-    double *output_evaluated_by_CPU = evaluateDenseInput(model, input_test);
+    NeuralNetworkHost::printDenseNetwork(model);
+    double *host_output = NeuralNetworkHost::evaluateDenseInput(model, input_test);
 
     std::cout << "GPU tests:" << std::endl;
-    double *output;
-    cudaMalloc(&output, output_size * sizeof(double));
-    double *input_test_GPU = (double *) copyVectorToGPU(input_test, input_size * sizeof(double));
-    // evaluateDenseInputUsingGPU(model_GPU_address, input_test_GPU);
-    for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) trainDenseNetworkUsingGPU(model_GPU_address, (size_t) data_size, data);
-    double *output_CPU = (double *) malloc(output_size * sizeof(double));
-    cudaMemcpy(output_CPU, output, output_size * sizeof(double), cudaMemcpyDeviceToHost);
+    network m = NeuralNetworkHost::genDenseNetwork(layers_num, layers_size, input_size, output_size, NULL);
+    network *model_GPU_address = CudaManagementByHost::copyNetworkToGPU(
+        m
+    );
+
+    for(size_t i = 0; i < (size_t) TRAINING_TIMES; i++) CudaManagementByHost::trainDenseNetworkUsingGPU(model_GPU_address, (size_t) data_size, data);
+    double *device_input = (double *) CudaManagementByHost::copyData(input_test, input_size * sizeof(double), cudaMemcpyHostToDevice);
+    double *device_output = CudaManagementByHost::evaluateDenseInputUsingGPU(model_GPU_address, device_input);
     std::cout << "evaluation result:" << std::endl;
     for (size_t i = 0; i < output_size; i++)
     {
-        std::cout << output_CPU[i] << std::endl;
-        std::cout << output_evaluated_by_CPU[i] << std::endl;
+        std::cout << device_output[i] << std::endl;
+        std::cout << host_output[i] << std::endl;
     }
+    return 0;
 }
