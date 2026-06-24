@@ -75,10 +75,10 @@ namespace NeuralNetworkHost {
 
 // CPU functions to use GPU processing:
 namespace CudaManagementByHost {
-    double costDenseNetworkUsingGPU(network *model, size_t data_size, double **data);
+    double costDenseNetworkUsingGPU(network *model, network *host_model_with_device_weights, size_t data_size, double **data);
     void trainUsingGPU(network model, size_t data_size, double **data);
-    void trainDenseNetworkUsingGPU(network *device_model_address, int data_size, double **host_data);
-    double *evaluateDenseInputUsingGPU(network *model, double *input);
+    void trainDenseNetworkUsingGPU(network *device_model, network *host_model_with_device_weights, int data_size, double **host_data);
+    double *evaluateDenseInputUsingGPU(network *model, network *host_model_with_device_weights, double *input);
     void *copyData(void *content, size_t size, cudaMemcpyKind option)
     {
         void *address;
@@ -91,6 +91,7 @@ namespace CudaManagementByHost {
         return address;
     }
     network *copyNetworkToGPU(network model);
+    network *getWeightsFromGPU(network *device_model);
 }
 
 // Neural network device functions:
